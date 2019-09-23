@@ -1419,6 +1419,7 @@ FILE_VERSION_FILTER = "cleartool desc -fmt \%Vn"
       <value name='*.ucf'/>
       <value name='*.qsf'/>
       <value name='*.ice'/>
+      <value name='*.proto'/>
     </option>
     <option type='bool' id='RECURSIVE' defval='0'>
       <docs>
