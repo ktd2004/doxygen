@@ -126,6 +126,7 @@ static bool             insidePHP   = FALSE;		//!< processing PHP code?
 static bool             insideObjC  = FALSE;            //!< processing Objective C code?
 static bool             insideCli   = FALSE;            //!< processing C++/CLI code?
 static bool             insideJS    = FALSE;            //!< processing JavaScript code?
+static bool             insidePROTO = FALSE;            //!< processing Proto code?
 static bool             insideCpp   = TRUE;             //!< processing C/C++ code
 
 static bool             insideCppQuote = FALSE;
@@ -383,14 +384,15 @@ static void setContext()
   insidePHP  = language==SrcLangExt_PHP;
   insideObjC = language==SrcLangExt_ObjC;
   insideJS   = language==SrcLangExt_JS;
+  insidePROTO= language==SrcLangExt_PROTO;
   insideCpp  = language==SrcLangExt_Cpp;
   if ( insidePHP )
   {
     useOverrideCommands = TRUE;
   }
   //printf("setContext(%s) insideIDL=%d insideJava=%d insideCS=%d "
-  //       "insideD=%d insidePHP=%d insideObjC=%d\n",
-  //       yyFileName.data(),insideIDL,insideJava,insideCS,insideD,insidePHP,insideObjC
+  //       "insideD=%d insidePHP=%d insideObjC=%d,insidePROTO=%d\n",
+  //       yyFileName.data(),insideIDL,insideJava,insideCS,insideD,insidePHP,insideObjC,insidePROTO
   //	);
 }
 
@@ -1745,6 +1747,24 @@ OPERATOR  "operator"{B}*({ARITHOP}|{ASSIGNOP}|{LOGICOP}|{BITOP})
 					  if (yytext[yyleng-1]=='{') unput('{');
 					  BEGIN( CompoundName ) ;
 					}
+<FindMembers>{B}*"message{" | 
+<FindMembers>{B}*"message"/{BN}+        {
+					  isTypedef=false;
+					  current->section = Entry::CLASS_SEC ;
+					  current->spec    = Entry::Struct |
+					    (current->spec & Entry::Published); // preserve UNO IDL
+					  // bug 582676: can be a struct nested in an interface so keep insideObjC state
+					  //current->objc    = insideObjC = FALSE;
+					  addType( current ) ;
+					  current->type += " message" ;
+					  current->fileName  = yyFileName;
+					  current->startLine = yyLineNr;
+					  current->startColumn = yyColNr;
+					  current->bodyLine  = yyLineNr;
+					  lineCount() ;
+					  if (yytext[yyleng-1]=='{') unput('{');
+					  BEGIN( CompoundName ) ;
+					}
 <FindMembers>{B}*"value struct{" |      // C++/CLI extension
 <FindMembers>{B}*"value struct"{BN}+     {
   					  isTypedef=FALSE;
@@ -2316,6 +2336,19 @@ OPERATOR  "operator"{B}*({ARITHOP}|{ASSIGNOP}|{LOGICOP}|{BITOP})
 					      BEGIN(NextSemi);
 					    else // insideJava or insideD
 					      BEGIN(JavaImport);
+					  }
+					  else if (insidePROTO && yyleng== 6 && qstrcmp(yytext, "import") == 0)
+					  {
+					    BEGIN(NextSemi);
+					  }
+					  else if (insidePROTO && yyleng== 6 && qstrcmp(yytext, "option") == 0)
+					  {
+					    BEGIN(NextSemi);
+					  }
+					  else if (insidePROTO && yyleng== 7 && qstrcmp(yytext,"package")==0)
+					  {
+					    lineCount();
+					    BEGIN(PackageName);
 					  }
 					  else if (insidePHP && qstrcmp(yytext,"use")==0)
 					  {
@@ -3662,7 +3695,45 @@ OPERATOR  "operator"{B}*({ARITHOP}|{ASSIGNOP}|{LOGICOP}|{BITOP})
 					  //printf("adding `%s' `%s' `%s' to enum `%s' (mGrpId=%d)\n",
 					  //     current->type.data(), current->name.data(),
 					  //     current->args.data(), current_root->name.data(),current->mGrpId);
-  					  if (!current->name.isEmpty())
+					  if (!current->name.isEmpty() && !insidePROTO)
+					  {
+					    current->fileName   = yyFileName;
+					    current->startLine  = yyLineNr;
+					    current->startColumn = yyColNr;
+					    if (!(current_root->spec&Entry::Enum))
+					    {
+					      current->type       = "@"; // enum marker
+					    }
+					    current->args       = current->args.simplifyWhiteSpace();
+					    current->name       = current->name.stripWhiteSpace();
+					    current->section    = Entry::VARIABLE_SEC;
+					    // add to the scope of the enum
+					    current_root->addSubEntry(current);
+					    if (!insideCS && !insideJava &&
+                                                !(current_root->spec&Entry::Strong))
+                                                // for C# and Java 1.5+ enum values always have to be explicitly qualified,
+                                                // same for C++11 style enums (enum class Name {})
+					    {
+					      current             = new Entry(*current);
+					      // add to the scope surrounding the enum (copy!)
+					      current_root->parent()->addSubEntry(current);
+					    }
+					    current             = new Entry ;
+					    initEntry();
+					  }
+					  else // probably a redundant ,
+					  {
+					    current->reset();
+					    initEntry();
+					  }
+					}
+<FindFields>";"				{
+					  // For enum of protobuf
+
+					  //printf("adding `%s' `%s' `%s' to enum `%s' (mGrpId=%d)\n",
+					  //     current->type.data(), current->name.data(),
+					  //     current->args.data(), current_root->name.data(),current->mGrpId);
+					  if (!current->name.isEmpty() && insidePROTO)
 					  {
 					    current->fileName   = yyFileName;
 					    current->startLine  = yyLineNr;

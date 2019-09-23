@@ -334,6 +334,7 @@ void DocSets::addIndexItem(Definition *context,MemberDef *md,
     case SrcLangExt_SQL:     lang="sql"; break;        // Sql
     case SrcLangExt_Tcl:     lang="tcl"; break;        // Tcl
     case SrcLangExt_Markdown:lang="markdown"; break;   // Markdown
+    case SrcLangExt_PROTO:   lang="proto"; break;      // proto
     case SrcLangExt_Unknown: lang="unknown"; break;    // should not happen!
   }
 
